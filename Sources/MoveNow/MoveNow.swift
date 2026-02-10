@@ -300,9 +300,9 @@ final class ReminderEngine: ObservableObject {
 
     private func bindSettings() {
         settings.$isEnabled
-            .sink { [weak self] _ in
+            .sink { [weak self] isEnabled in
                 guard let self else { return }
-                if !self.settings.isEnabled {
+                if !isEnabled {
                     self.clearPendingReminder()
                 }
                 self.recalculateNextReminder()
@@ -310,9 +310,9 @@ final class ReminderEngine: ObservableObject {
             .store(in: &cancellables)
 
         settings.$isPaused
-            .sink { [weak self] _ in
+            .sink { [weak self] isPaused in
                 guard let self else { return }
-                if self.settings.isPaused {
+                if isPaused {
                     self.clearPendingReminder()
                 } else {
                     self.recalculateNextReminder()
