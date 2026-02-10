@@ -39,6 +39,32 @@ private enum AppIconAssets {
         return copy
     }
 
+    static var menuBarIconPaused: NSImage {
+        let base = menuBarIcon
+        let size = base.size
+
+        let composited = NSImage(size: size, flipped: false) { rect in
+            base.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 0.45)
+
+            // Draw two small pause bars in the top-right corner
+            let barWidth: CGFloat = 1.5
+            let barHeight: CGFloat = 6
+            let barSpacing: CGFloat = 1.5
+            let totalWidth = barWidth * 2 + barSpacing
+            let originX = rect.maxX - totalWidth - 0.5
+            let originY = rect.maxY - barHeight - 0.5
+
+            NSColor.black.setFill()
+            NSRect(x: originX, y: originY, width: barWidth, height: barHeight).fill()
+            NSRect(x: originX + barWidth + barSpacing, y: originY, width: barWidth, height: barHeight).fill()
+
+            return true
+        }
+
+        composited.isTemplate = true
+        return composited
+    }
+
     static var appIcon: NSImage? {
         guard let image = loadAppIconImage() else { return nil }
         let copy = (image.copy() as? NSImage) ?? image
@@ -587,7 +613,7 @@ struct MoveNowApp: App {
                 .environmentObject(settings)
                 .environmentObject(engine)
         } label: {
-            Image(nsImage: AppIconAssets.menuBarIcon)
+            Image(nsImage: settings.isPaused ? AppIconAssets.menuBarIconPaused : AppIconAssets.menuBarIcon)
                 .renderingMode(.template)
                 .resizable()
                 .scaledToFit()
