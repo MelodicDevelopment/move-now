@@ -143,6 +143,7 @@ final class ReminderSettings: ObservableObject {
         static let intervalMinutes = "intervalMinutes"
         static let startMinutes = "startMinutes"
         static let endMinutes = "endMinutes"
+        static let activeDays = "activeDays"
     }
 
     @Published var isEnabled: Bool {
@@ -186,6 +187,10 @@ final class ReminderSettings: ObservableObject {
         }
     }
 
+    @Published var activeDays: Set<Int> {
+        didSet { UserDefaults.standard.set(Array(activeDays), forKey: Keys.activeDays) }
+    }
+
     init() {
         let defaults = UserDefaults.standard
         self.isEnabled = defaults.object(forKey: Keys.isEnabled) as? Bool ?? true
@@ -199,6 +204,9 @@ final class ReminderSettings: ObservableObject {
 
         let end = defaults.object(forKey: Keys.endMinutes) as? Int ?? (17 * 60)
         self.endMinutes = max(0, min(1439, end))
+
+        let savedDays = defaults.object(forKey: Keys.activeDays) as? [Int] ?? Array(1...7)
+        self.activeDays = Set(savedDays)
     }
 }
 
@@ -329,6 +337,10 @@ final class ReminderEngine: ObservableObject {
             .store(in: &cancellables)
 
         settings.$endMinutes
+            .sink { [weak self] _ in self?.recalculateNextReminder() }
+            .store(in: &cancellables)
+
+        settings.$activeDays
             .sink { [weak self] _ in self?.recalculateNextReminder() }
             .store(in: &cancellables)
     }
@@ -533,6 +545,7 @@ final class ReminderEngine: ObservableObject {
         guard settings.startMinutes < settings.endMinutes else { return nil }
 
         let calendar = Calendar.current
+        let weekday = calendar.component(.weekday, from: candidate)
         let dayStart = calendar.startOfDay(for: candidate)
 
         guard let windowStart = calendar.date(byAdding: .minute, value: settings.startMinutes, to: dayStart),
@@ -540,7 +553,7 @@ final class ReminderEngine: ObservableObject {
             return nil
         }
 
-        if candidate <= windowEnd {
+        if settings.activeDays.contains(weekday) && candidate <= windowEnd {
             if candidate >= windowStart {
                 return candidate
             }
@@ -560,6 +573,9 @@ final class ReminderEngine: ObservableObject {
         for dayOffset in 0..<7 {
             guard let day = calendar.date(byAdding: .day, value: dayOffset, to: referenceDate) else { continue }
             let dayStart = calendar.startOfDay(for: day)
+
+            let weekday = calendar.component(.weekday, from: dayStart)
+            guard settings.activeDays.contains(weekday) else { continue }
 
             guard let windowStart = calendar.date(byAdding: .minute, value: settings.startMinutes, to: dayStart),
                   let windowEnd = calendar.date(byAdding: .minute, value: settings.endMinutes, to: dayStart) else {
@@ -685,7 +701,40 @@ private struct MenuContentView: View {
                     .foregroundStyle(.secondary)
             }
 
+            // MARK: Active Days
+            GroupBox {
+                HStack(spacing: 4) {
+                    ForEach(Self.orderedDays, id: \.weekday) { day in
+                        Toggle(isOn: Binding(
+                            get: { settings.activeDays.contains(day.weekday) },
+                            set: { isOn in
+                                if isOn {
+                                    settings.activeDays.insert(day.weekday)
+                                } else {
+                                    settings.activeDays.remove(day.weekday)
+                                }
+                            }
+                        )) {
+                            Text(day.label)
+                                .font(.caption2.weight(.semibold))
+                                .frame(maxWidth: .infinity)
+                        }
+                        .toggleStyle(.button)
+                        .controlSize(.small)
+                    }
+                }
+                .padding(.vertical, 2)
+            } label: {
+                Text("Active Days")
+                    .font(.subheadline.weight(.medium))
+                    .foregroundStyle(.secondary)
+            }
+
             // MARK: Warnings
+            if settings.activeDays.isEmpty {
+                warningLabel("No active days selected", color: .red)
+            }
+
             if settings.startMinutes >= settings.endMinutes {
                 warningLabel("Start must be earlier than end", color: .red)
             }
@@ -779,6 +828,12 @@ private struct MenuContentView: View {
             engine.refreshNotificationAuthorizationStatus()
         }
     }
+
+    // MARK: - Day data
+
+    private static let orderedDays: [(weekday: Int, label: String)] = [
+        (1, "Su"), (2, "Mo"), (3, "Tu"), (4, "We"), (5, "Th"), (6, "Fr"), (7, "Sa"),
+    ]
 
     // MARK: - Status helpers
 
