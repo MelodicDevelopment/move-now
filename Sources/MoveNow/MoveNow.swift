@@ -846,7 +846,7 @@ private struct MenuContentView: View {
             Label("Disabled", systemImage: "moon.fill")
                 .foregroundStyle(.secondary)
         } else if let next = engine.nextReminderDate {
-            Label("Next: \(next, style: .time)", systemImage: "clock")
+            Label(nextReminderText(for: next), systemImage: "clock")
                 .foregroundStyle(.primary)
         } else {
             Label("No upcoming reminder", systemImage: "clock")
@@ -859,6 +859,20 @@ private struct MenuContentView: View {
             return AnyShapeStyle(.orange.opacity(0.1))
         } else {
             return AnyShapeStyle(.quaternary)
+        }
+    }
+
+    private func nextReminderText(for date: Date) -> String {
+        let timeFormatter = DateFormatter()
+        timeFormatter.timeStyle = .short
+        timeFormatter.dateStyle = .none
+        if Calendar.current.isDateInToday(date) {
+            return "Next: \(timeFormatter.string(from: date))"
+        } else {
+            let dateFormatter = DateFormatter()
+            dateFormatter.dateStyle = .medium
+            dateFormatter.timeStyle = .short
+            return "Next: \(dateFormatter.string(from: date))"
         }
     }
 
