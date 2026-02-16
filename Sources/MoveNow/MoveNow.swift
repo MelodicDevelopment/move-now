@@ -210,6 +210,58 @@ final class ReminderSettings: ObservableObject {
     }
 }
 
+struct MovementEntry: Codable, Identifiable {
+    let id: UUID
+    let date: Date
+    let activity: String
+
+    init(activity: String = "", date: Date = Date()) {
+        self.id = UUID()
+        self.date = date
+        self.activity = activity
+    }
+}
+
+@MainActor
+final class MovementLog: ObservableObject {
+    @Published private(set) var entries: [MovementEntry] = []
+
+    private let fileURL: URL
+
+    init() {
+        let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let appDir = appSupport.appendingPathComponent("MoveNow", isDirectory: true)
+        try? FileManager.default.createDirectory(at: appDir, withIntermediateDirectories: true)
+        self.fileURL = appDir.appendingPathComponent("movement-log.json")
+        self.entries = Self.load(from: fileURL)
+    }
+
+    func addEntry(activity: String) {
+        let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
+        let entry = MovementEntry(activity: trimmed)
+        entries.insert(entry, at: 0)
+        save()
+    }
+
+    var recentEntries: [MovementEntry] {
+        Array(entries.prefix(5))
+    }
+
+    private func save() {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        guard let data = try? encoder.encode(entries) else { return }
+        try? data.write(to: fileURL, options: .atomic)
+    }
+
+    private static func load(from url: URL) -> [MovementEntry] {
+        guard let data = try? Data(contentsOf: url) else { return [] }
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .iso8601
+        return (try? decoder.decode([MovementEntry].self, from: data)) ?? []
+    }
+}
+
 @MainActor
 final class ReminderEngine: ObservableObject {
     @Published private(set) var nextReminderDate: Date?
@@ -259,6 +311,12 @@ final class ReminderEngine: ObservableObject {
         }
     }
 
+    private var movementLog: MovementLog?
+
+    func setMovementLog(_ log: MovementLog) {
+        self.movementLog = log
+    }
+
     init(settings: ReminderSettings) {
         self.settings = settings
         self.canUseUserNotifications = Bundle.main.bundleURL.pathExtension == "app"
@@ -289,6 +347,7 @@ final class ReminderEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.movementLog?.addEntry(activity: "")
                 self?.acknowledgeAndReset()
                 self?.lastActionMessage = "Reminder acknowledged from notification."
             }
@@ -300,6 +359,7 @@ final class ReminderEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                self?.movementLog?.addEntry(activity: "")
                 self?.acknowledgeAndReset()
                 self?.lastActionMessage = "Reminder dismissed."
             }
@@ -612,11 +672,16 @@ final class ReminderEngine: ObservableObject {
 struct MoveNowApp: App {
     @StateObject private var settings: ReminderSettings
     @StateObject private var engine: ReminderEngine
+    @StateObject private var movementLog: MovementLog
 
     init() {
         let settings = ReminderSettings()
+        let engine = ReminderEngine(settings: settings)
+        let log = MovementLog()
+        engine.setMovementLog(log)
         _settings = StateObject(wrappedValue: settings)
-        _engine = StateObject(wrappedValue: ReminderEngine(settings: settings))
+        _engine = StateObject(wrappedValue: engine)
+        _movementLog = StateObject(wrappedValue: log)
 
         if let appIcon = AppIconAssets.appIcon {
             NSApplication.shared.applicationIconImage = appIcon
@@ -628,6 +693,7 @@ struct MoveNowApp: App {
             MenuContentView()
                 .environmentObject(settings)
                 .environmentObject(engine)
+                .environmentObject(movementLog)
         } label: {
             Image(nsImage: settings.isPaused ? AppIconAssets.menuBarIconPaused : AppIconAssets.menuBarIcon)
                 .renderingMode(.template)
@@ -642,6 +708,8 @@ struct MoveNowApp: App {
 private struct MenuContentView: View {
     @EnvironmentObject var settings: ReminderSettings
     @EnvironmentObject var engine: ReminderEngine
+    @EnvironmentObject var movementLog: MovementLog
+    @State private var activityText = ""
 
     var body: some View {
         VStack(spacing: 14) {
@@ -758,11 +826,20 @@ private struct MenuContentView: View {
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
 
+            // MARK: Activity Log
+            TextField("What did you do? (optional)", text: $activityText)
+                .textFieldStyle(.roundedBorder)
+                .controlSize(.small)
+                .onSubmit {
+                    guard settings.isEnabled, !settings.isPaused else { return }
+                    logAndAcknowledge()
+                }
+
             // MARK: Actions
             VStack(spacing: 8) {
                 HStack(spacing: 8) {
                     Button {
-                        engine.acknowledgeAndReset()
+                        logAndAcknowledge()
                     } label: {
                         Text("I Moved")
                             .frame(maxWidth: .infinity)
@@ -789,6 +866,24 @@ private struct MenuContentView: View {
                     .controlSize(.small)
                     .disabled(!settings.isEnabled)
                 }
+            }
+
+            // MARK: Recent Activity
+            if !movementLog.recentEntries.isEmpty {
+                DisclosureGroup("Recent Activity") {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(movementLog.recentEntries) { entry in
+                            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                                Text(Self.entryTimeFormatter.string(from: entry.date))
+                                    .foregroundStyle(.secondary)
+                                    .monospacedDigit()
+                                Text(entry.activity.isEmpty ? "Moved" : entry.activity)
+                            }
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+                .font(.caption)
             }
 
             // MARK: Footer
@@ -829,7 +924,22 @@ private struct MenuContentView: View {
         }
     }
 
+    // MARK: - Actions
+
+    private func logAndAcknowledge() {
+        movementLog.addEntry(activity: activityText)
+        activityText = ""
+        engine.acknowledgeAndReset()
+    }
+
     // MARK: - Day data
+
+    private static let entryTimeFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.dateStyle = .short
+        formatter.timeStyle = .short
+        return formatter
+    }()
 
     private static let orderedDays: [(weekday: Int, label: String)] = [
         (1, "Su"), (2, "Mo"), (3, "Tu"), (4, "We"), (5, "Th"), (6, "Fr"), (7, "Sa"),
