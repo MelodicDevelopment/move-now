@@ -110,6 +110,7 @@ final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterD
     static let reminderCategoryIdentifier = "MOVENOW_REMINDER"
     static let movedActionIdentifier = "MOVENOW_ACTION_MOVED"
     static let logActivityActionIdentifier = "MOVENOW_ACTION_LOG_ACTIVITY"
+    static let didNotMoveActionIdentifier = "MOVENOW_ACTION_DID_NOT_MOVE"
     static let reminderThreadIdentifier = "move-now-reminder-thread"
 
     func userNotificationCenter(
@@ -125,7 +126,13 @@ final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterD
         didReceive response: UNNotificationResponse,
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
-        if response.actionIdentifier == UNNotificationDefaultActionIdentifier ||
+        if response.actionIdentifier == Self.didNotMoveActionIdentifier {
+            NotificationCenter.default.post(
+                name: .moveNowNotificationActivated,
+                object: nil,
+                userInfo: ["activity": "Didn't move"]
+            )
+        } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier ||
             response.actionIdentifier == Self.movedActionIdentifier ||
             response.actionIdentifier == Self.logActivityActionIdentifier {
             var userInfo: [String: String] = [:]
@@ -572,9 +579,15 @@ final class ReminderEngine: ObservableObject {
             textInputPlaceholder: "What did you do?"
         )
 
+        let didNotMoveAction = UNNotificationAction(
+            identifier: NotificationCenterDelegateProxy.didNotMoveActionIdentifier,
+            title: "Didn't Move",
+            options: []
+        )
+
         let category = UNNotificationCategory(
             identifier: NotificationCenterDelegateProxy.reminderCategoryIdentifier,
-            actions: [movedAction, logActivityAction],
+            actions: [movedAction, logActivityAction, didNotMoveAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
