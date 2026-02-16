@@ -109,6 +109,7 @@ private enum AppIconAssets {
 final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterDelegate {
     static let reminderCategoryIdentifier = "MOVENOW_REMINDER"
     static let movedActionIdentifier = "MOVENOW_ACTION_MOVED"
+    static let logActivityActionIdentifier = "MOVENOW_ACTION_LOG_ACTIVITY"
     static let reminderThreadIdentifier = "move-now-reminder-thread"
 
     func userNotificationCenter(
@@ -125,7 +126,8 @@ final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterD
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier ||
-            response.actionIdentifier == Self.movedActionIdentifier {
+            response.actionIdentifier == Self.movedActionIdentifier ||
+            response.actionIdentifier == Self.logActivityActionIdentifier {
             var userInfo: [String: String] = [:]
             if let textResponse = response as? UNTextInputNotificationResponse {
                 userInfo["activity"] = textResponse.userText
@@ -244,6 +246,11 @@ final class MovementLog: ObservableObject {
         let trimmed = activity.trimmingCharacters(in: .whitespacesAndNewlines)
         let entry = MovementEntry(activity: trimmed)
         entries.insert(entry, at: 0)
+        save()
+    }
+
+    func deleteEntry(id: UUID) {
+        entries.removeAll { $0.id == id }
         save()
     }
 
@@ -551,17 +558,23 @@ final class ReminderEngine: ObservableObject {
     }
 
     private func configureNotificationCategories() {
-        let movedAction = UNTextInputNotificationAction(
+        let movedAction = UNNotificationAction(
             identifier: NotificationCenterDelegateProxy.movedActionIdentifier,
             title: "I Moved",
+            options: []
+        )
+
+        let logActivityAction = UNTextInputNotificationAction(
+            identifier: NotificationCenterDelegateProxy.logActivityActionIdentifier,
+            title: "Log Activity",
             options: [],
             textInputButtonTitle: "Log",
-            textInputPlaceholder: "What did you do? (optional)"
+            textInputPlaceholder: "What did you do?"
         )
 
         let category = UNNotificationCategory(
             identifier: NotificationCenterDelegateProxy.reminderCategoryIdentifier,
-            actions: [movedAction],
+            actions: [movedAction, logActivityAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
@@ -885,6 +898,14 @@ private struct MenuContentView: View {
                                     .foregroundStyle(.secondary)
                                     .monospacedDigit()
                                 Text(entry.activity.isEmpty ? "Moved" : entry.activity)
+                                Spacer()
+                                Button {
+                                    movementLog.deleteEntry(id: entry.id)
+                                } label: {
+                                    Image(systemName: "trash")
+                                        .foregroundStyle(.secondary)
+                                }
+                                .buttonStyle(.borderless)
                             }
                         }
                     }
