@@ -126,7 +126,11 @@ final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterD
     ) {
         if response.actionIdentifier == UNNotificationDefaultActionIdentifier ||
             response.actionIdentifier == Self.movedActionIdentifier {
-            NotificationCenter.default.post(name: .moveNowNotificationActivated, object: nil)
+            var userInfo: [String: String] = [:]
+            if let textResponse = response as? UNTextInputNotificationResponse {
+                userInfo["activity"] = textResponse.userText
+            }
+            NotificationCenter.default.post(name: .moveNowNotificationActivated, object: nil, userInfo: userInfo)
         } else if response.actionIdentifier == UNNotificationDismissActionIdentifier {
             NotificationCenter.default.post(name: .moveNowNotificationDismissed, object: nil)
         }
@@ -345,9 +349,10 @@ final class ReminderEngine: ObservableObject {
             forName: .moveNowNotificationActivated,
             object: nil,
             queue: .main
-        ) { [weak self] _ in
+        ) { [weak self] notification in
+            let activity = notification.userInfo?["activity"] as? String ?? ""
             Task { @MainActor in
-                self?.movementLog?.addEntry(activity: "")
+                self?.movementLog?.addEntry(activity: activity)
                 self?.acknowledgeAndReset()
                 self?.lastActionMessage = "Reminder acknowledged from notification."
             }
@@ -546,10 +551,12 @@ final class ReminderEngine: ObservableObject {
     }
 
     private func configureNotificationCategories() {
-        let movedAction = UNNotificationAction(
+        let movedAction = UNTextInputNotificationAction(
             identifier: NotificationCenterDelegateProxy.movedActionIdentifier,
             title: "I Moved",
-            options: []
+            options: [],
+            textInputButtonTitle: "Log",
+            textInputPlaceholder: "What did you do? (optional)"
         )
 
         let category = UNNotificationCategory(
