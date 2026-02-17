@@ -123,8 +123,7 @@ final class NotificationCenterDelegateProxy: NSObject, UNUserNotificationCenterD
                 userInfo: ["activity": "Didn't move"]
             )
         } else if response.actionIdentifier == UNNotificationDefaultActionIdentifier ||
-            response.actionIdentifier == Self.movedActionIdentifier ||
-            response.actionIdentifier == Self.logActivityActionIdentifier {
+            response.actionIdentifier == Self.movedActionIdentifier {
             var userInfo: [String: String] = [:]
             if let textResponse = response as? UNTextInputNotificationResponse {
                 userInfo["activity"] = textResponse.userText
@@ -368,9 +367,7 @@ final class ReminderEngine: ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.movementLog?.addEntry(activity: "")
-                self?.acknowledgeAndReset()
-                self?.lastActionMessage = "Reminder dismissed."
+                self?.fireReminder(startSticky: false)
             }
         }
     }
@@ -517,7 +514,7 @@ final class ReminderEngine: ObservableObject {
         content.interruptionLevel = .timeSensitive
 
         let request = UNNotificationRequest(
-            identifier: "move-now-\(UUID().uuidString)",
+            identifier: "move-now-reminder",
             content: content,
             trigger: UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
         )
@@ -555,15 +552,9 @@ final class ReminderEngine: ObservableObject {
     }
 
     private func configureNotificationCategories() {
-        let movedAction = UNNotificationAction(
+        let movedAction = UNTextInputNotificationAction(
             identifier: NotificationCenterDelegateProxy.movedActionIdentifier,
             title: "I Moved",
-            options: []
-        )
-
-        let logActivityAction = UNTextInputNotificationAction(
-            identifier: NotificationCenterDelegateProxy.logActivityActionIdentifier,
-            title: "Log Activity",
             options: [],
             textInputButtonTitle: "Log",
             textInputPlaceholder: "What did you do?"
@@ -577,7 +568,7 @@ final class ReminderEngine: ObservableObject {
 
         let category = UNNotificationCategory(
             identifier: NotificationCenterDelegateProxy.reminderCategoryIdentifier,
-            actions: [movedAction, logActivityAction, didNotMoveAction],
+            actions: [movedAction, didNotMoveAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
