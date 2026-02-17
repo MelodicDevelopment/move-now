@@ -18,44 +18,16 @@ Menu bar macOS app that sends reminder notifications every N minutes within a da
 
 ## Build & Run
 
-### Quick development run
+Open `MoveNow.xcodeproj` in Xcode and run the MoveNow scheme (Cmd+R).
+
+The project can also be built from the command line:
 
 ```bash
-swift run
+xcodebuild -project MoveNow.xcodeproj -scheme MoveNow -configuration Debug build
 ```
-
-This works for menu bar behavior, but runs as a plain executable (not an app bundle). In that mode, reminders use a sound fallback (`beep`) instead of Notification Center banners.
-
-### Build the app bundle
-
-```bash
-./scripts/run-app.sh
-```
-
-This will:
-1. Run `swift build`
-2. Assemble a macOS `.app` bundle at `dist/Move Now.app`
-3. Copy the binary, icons, and `Info.plist` into the bundle
-4. Code-sign the bundle (ad-hoc)
-5. Launch the app
-
-Pass `--debug` to enable the "Remind Now" button in the menu:
-
-```bash
-./scripts/run-app.sh --debug
-```
-
-If `MoveNow` does not appear in macOS Notification settings:
-
-```bash
-./scripts/reset-notification-permission.sh
-./scripts/run-app.sh
-```
-
-Then click `Remind Now` once to force a notification request.
 
 ## Notes
 
-- On first bundled run, macOS will ask for notification permission.
+- On first run, macOS will ask for notification permission.
 - Time window currently assumes `start < end` on the same day (no overnight windows).
 - First reminder in a window is `start + interval`.

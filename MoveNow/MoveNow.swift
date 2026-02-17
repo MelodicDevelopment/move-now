@@ -78,18 +78,8 @@ private enum AppIconAssets {
             return image
         }
 
-        if let moduleURL = Bundle.module.url(forResource: "MoveNowStatusIcon", withExtension: "png"),
-           let image = NSImage(contentsOf: moduleURL) {
-            return image
-        }
-
         if let mainURL = Bundle.main.url(forResource: "MoveNowIcon", withExtension: "png"),
            let image = NSImage(contentsOf: mainURL) {
-            return image
-        }
-
-        if let moduleURL = Bundle.module.url(forResource: "MoveNowIcon", withExtension: "png"),
-           let image = NSImage(contentsOf: moduleURL) {
             return image
         }
 
