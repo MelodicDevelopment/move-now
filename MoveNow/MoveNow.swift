@@ -305,6 +305,10 @@ final class ReminderEngine: ObservableObject {
         }
     }
 
+    var shouldShowEnableNotificationsButton: Bool {
+        canUseUserNotifications && notificationAuthorizationStatus == .notDetermined
+    }
+
     var shouldShowOpenSettingsButton: Bool {
         canUseUserNotifications && notificationAuthorizationStatus == .denied
     }
@@ -823,6 +827,14 @@ private struct MenuContentView: View {
 
             if let notificationWarningText = engine.notificationWarningText {
                 warningLabel(notificationWarningText, color: .orange)
+            }
+
+            if engine.shouldShowEnableNotificationsButton {
+                Button("Enable Notifications") {
+                    engine.requestNotificationAuthorization()
+                }
+                .buttonStyle(.link)
+                .font(.caption)
             }
 
             if engine.shouldShowOpenSettingsButton {
